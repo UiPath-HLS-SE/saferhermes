@@ -1,0 +1,212 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+
+version: "3"
+
+set: [errexit, pipefail]
+
+dotenv:
+  - vagrant/openclaw.service.env
+tasks:
+  create:
+    desc: Sets up and starts the openclaw Virtual Machine
+    cmds:
+      - task: _provision
+      - task: up
+      - cmd: |
+          echo "After you finish approving your device, you probably want to \
+          add an API for a model provider. You can do so using 'task setup-models'."
+    silent: true
+
+  up:
+    desc: Start the openclaw Virtual Machine
+    cmds:
+      - task: _up
+      - task: login
+    silent: true
+
+  down:
+    desc: Suspends the openclaw Virtual Machine
+    cmds:
+      - vagrant suspend
+    silent: true
+
+  restart:
+    desc: Restart the openclaw Virtual Machine
+    cmds:
+      - vagrant reload
+      - cmd: sleep 2 # wait for openclaw service to become available
+        platforms: [linux, darwin]
+      - cmd: powershell -NoProfile -Command "Start-Sleep -Seconds 2" # wait for openclaw service to become available
+        platforms: [windows]
+      - task: login
+    silent: true
+
+  destroy:
+    desc: Destroy the openclaw Virtual Machine
+    prompt: This will destroy the virtual machine and all data associated with it. Are you sure?
+    cmds:
+      - vagrant destroy --force
+    silent: true
+
+  _provision:
+    desc: Start the openclaw Virtual Machine
+    prompt:
+      - |
+        WARNING: This instance is setup to send all logs to Azure as OpenClaw will interact with company resources.
+        If you continue you will be prompted to login to azure shortly. Continue?
+    internal: true
+    cmds:
+      - vagrant up --provision
+    status:
+      - |
+        {{if eq OS "windows"}}
+          powershell -NoProfile -Command "
+            $state=(
+              vagrant status openclaw --machine-readable | Select-String 'openclaw,state,' | Select-Object -Last 1
+            ).ToString().Split(',')[-1].Trim();
+            if ($state -eq 'running') { exit 0 } else { exit 1 }
+          "
+        {{else}}
+          test "$(vagrant status openclaw --machine-readable | grep 'openclaw,state,' | awk -F, '{print $NF}')" = "running"
+        {{end}}
+      - |
+        {{if eq OS "windows"}}
+          powershell -NoProfile -Command "
+            $svc=(vagrant ssh -c 'sudo systemctl is-active openclaw').Trim();
+            if ($svc -eq 'active') { exit 0 } else { exit 1 }"
+        {{else}}
+          test "$(vagrant ssh -c 'sudo systemctl is-active openclaw')" = "active"
+        {{end}}
+
+  _up:
+    desc: Start the openclaw Virtual Machine
+    internal: true
+    cmds:
+      - cmd: vagrant up
+      - cmd: sleep 2 # wait for openclaw service to become available
+        platforms: [linux, darwin]
+      - cmd: powershell -NoProfile -Command "Start-Sleep -Seconds 2" # wait for openclaw service to become available
+        platforms: [windows]
+    status:
+      - |
+        {{if eq OS "windows"}}
+          powershell -NoProfile -Command "
+            $svc=(vagrant ssh -c 'sudo systemctl is-active openclaw').Trim();
+            if ($svc -eq 'active') { exit 0 } else { exit 1 }"
+        {{else}}
+          test "$(vagrant ssh -c 'sudo systemctl is-active openclaw')" = "active"
+        {{end}}
+
+  login:
+    desc: Get the Openclaw authentication URL
+    aliases: [auth]
+    vars:
+      PID:
+        sh: vagrant ssh -c 'sudo pgrep -u openclaw openclaw | sort | head -n 1 | tr -d " \n"'
+      AUTH_TOKEN:
+        sh: vagrant ssh -c "sudo nsenter -a -t {{.PID}} -e env | grep OPENCLAW_GATEWAY_TOKEN | cut -d '=' -f 2 | tr -d '\n'"
+    preconditions:
+      - sh: |
+          {{if eq OS "windows"}}
+            powershell -NoProfile -Command "
+              $svc=(vagrant ssh -c 'sudo systemctl is-active openclaw').Trim();
+              if ($svc -eq 'active') { exit 0 } else { exit 1 }
+            "
+          {{else}}
+            test "$(vagrant ssh -c 'sudo systemctl is-active openclaw')" = "active"
+          {{end}}
+        msg: "Virtual Machine doesn't seem to be up. Run 'task up' first"
+    cmds:
+      - |
+        echo "Login to openclaw at: http://localhost:1337/#token={{.AUTH_TOKEN}}"
+      - echo "After that run 'task approve-device'"
+    silent: true
+
+  approve-device:
+    desc: Get the list of pending approvals and approve the connection of a device to OpenClaw
+    vars:
+      AUTH_TOKEN:
+        sh: |
+          vagrant ssh -c '
+            PID=$(sudo pgrep -u openclaw openclaw | sort | head -n 1 | tr -d " \n") && \
+            sudo nsenter -a -t $PID -e env | grep OPENCLAW_GATEWAY_TOKEN | cut -d "=" -f 2 | tr -d " \n"
+          '
+      DEVICES:
+        sh: vagrant ssh -c 'sudo openclaw devices list --token {{.AUTH_TOKEN}} --json | jq -r ".pending"'
+    cmds:
+      - echo '{{if ne .DEVICES "[]"}} Devices pending approval:{{.DEVICES}}. {{else}} No devices pending approval. {{end}}'
+      - cmd: echo "Get the 'requestId' for the device you wish to approve and pass it down below"
+        if: '{{ ne .DEVICES "[]" }}'
+      - task: _approve_request
+        if: '{{ ne .DEVICES "[]" }}'
+        vars: { AUTH_TOKEN: "{{.AUTH_TOKEN}}" }
+        interactive: true
+    silent: true
+
+  _approve_request:
+    desc: Approves the connection of a device to openclaw
+    requires:
+      vars: [AUTH_TOKEN, REQUEST_ID]
+    internal: true
+    cmds:
+      - vagrant ssh -c "openclaw devices approve --token {{.AUTH_TOKEN}} {{.REQUEST_ID}}"
+    silent: true
+
+  setup-models:
+    desc: Setup API keys for any model provider
+    prompt: This will allow you to add API keys for any model provider. You can skip the model selection step by pressing <ENTER>. Confirm?
+    vars:
+      PID:
+        sh: vagrant ssh -c 'sudo pgrep -u openclaw openclaw | sort | tail -n 1 | tr -d " \n"'
+      UID:
+        sh: vagrant ssh -c 'id -u openclaw'
+    cmds:
+      - cmd: |
+          vagrant ssh -c 'sudo nsenter -a -t {{.PID}} -e --setuid {{.UID}} \
+          openclaw configure --section model'
+        if: '{{ ne .PID "" }}'
+      - cmd: vagrant ssh -c 'sudo systemctl restart openclaw'
+    silent: true
+
+  logs:tail:
+    desc: Connect to the log stream of OpenClaw
+    prompt: This will show the latest logs of OpenClaw. Consider using 'logs:dump' for writing all the logs to a file. Continue?
+    deps: [_up]
+    cmd: vagrant ssh -c "sudo journalctl -fu openclaw"
+    silent: true
+
+  logs:dump:
+    desc: Dump the logs of Openclaw to a file
+    vars:
+      VM_LOG_FILE: /tmp/claw_logs.dump
+    requires:
+      vars: [LOG_FILE]
+    deps: [_up]
+    cmds:
+      - vagrant ssh -c "sudo journalctl --no-tail --no-pager -u openclaw " > {{.LOG_FILE}}
+      - echo "Logs written to {{.LOG_FILE}}"
+    silent: true
+
+  shell:
+    desc: Get a terminal session to interact with the OpenClaw service using the CLI
+    preconditions:
+      - sh: |
+          {{if eq OS "windows"}}
+            powershell -NoProfile -Command "
+              $svc=(vagrant ssh -c 'sudo systemctl is-active openclaw').Trim();
+              if ($svc -eq 'active') { exit 0 } else { exit 1 }
+            "
+          {{else}}
+            test "$(vagrant ssh -c 'sudo systemctl is-active openclaw')" = "active"
+          {{end}}
+        msg: "Virtual Machine doesn't seem to be up. Run 'task up' first"
+    vars:
+      PID:
+        sh: vagrant ssh -c 'sudo pgrep -u openclaw openclaw | sort | tail -n 1 | tr -d " \n"'
+      UID:
+        sh: vagrant ssh -c 'id -u openclaw'
+      GID:
+        sh: vagrant ssh -c 'id -g openclaw'
+    cmds:
+      - cmd: |
+          vagrant ssh -c "sudo nsenter -t {{.PID}} -ae --setuid {{.UID}} --setgid {{.GID}} bash"

@@ -1,0 +1,61 @@
+[Unit]
+Description=OpenClaw Gateway
+StartLimitBurst=3
+StartLimitIntervalSec=5min
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=openclaw
+Group=openclaw
+SupplementaryGroups=docker
+
+# [[Process specification]]
+ExecStart=/etc/openclaw/startup.sh
+EnvironmentFile=/etc/openclaw/service.env
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
+UMask=0077
+
+# [[Directories]]
+# resolves to /run/openclaw
+RuntimeDirectory=openclaw
+RuntimeDirectoryMode=0700
+# resolves to /var/lib/openclaw
+StateDirectory=openclaw
+StateDirectoryMode=0700
+# resolves to /var/cache/openclaw
+CacheDirectory=openclaw
+CacheDirectoryMode=0700
+# resolves to /var/log/openclaw
+LogsDirectory=openclaw
+LogsDirectoryMode=0700
+# resolves to /etc/openclaw
+ConfigurationDirectory=openclaw
+ConfigurationDirectoryMode=0700
+
+# [[Hardening]]
+# Taken from:
+# - https://www.redhat.com/en/blog/mastering-systemd
+# - https://manpages.debian.org/trixie/systemd/systemd.exec.5.en.html#SANDBOXING
+LockPersonality=yes
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProcSubset=pid
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectHostname=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectProc=noaccess
+ProtectSystem=strict
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+
+[Install]
+WantedBy=multi-user.target
