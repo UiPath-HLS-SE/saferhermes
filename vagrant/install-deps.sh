@@ -25,7 +25,7 @@ wget https://raw.githubusercontent.com/microsoft/mdatp-xplat/master/linux/instal
 wget 'https://dfescripts.blob.core.windows.net/dfelinuxscript/MicrosoftDefenderATPOnboardingLinuxServer.py?sp=r&st=2023-03-16T10:58:06Z&se=2026-04-01T17:58:06Z&spr=https&sv=2021-12-02&sr=b&sig=NIflnJXmjU%2Fl2h7UNBJddDuFaf67TzG0Wxl7H%2BnLjN8%3D' \
     -O ~/MicrosoftDefenderATPOnboardingLinuxServer.py
 chmod +x ~/mde_installer.sh
-~/mde_installer.sh
+~/mde_installer.sh \
     --install \
     --channel prod \
     --tag GROUP OPENCLAW \
