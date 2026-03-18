@@ -74,5 +74,5 @@ pnpm config set global-dir /usr/local/lib/node_modules && \
 echo -e "=== END ===\n"
 
 echo "=== Installing openclaw ==="
-pnpm add -g openclaw@2026.2.24 --prod --ignore-scripts
+pnpm add -g openclaw --prod --ignore-scripts
 echo -e "=== END ===\n"
