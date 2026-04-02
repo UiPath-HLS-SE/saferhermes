@@ -1,0 +1,21 @@
+# Configure models and messaging credentials with `task setup-gateway` and
+# `task setup-models` after provisioning.
+
+worktree: true
+
+terminal:
+  backend: docker
+  cwd: /workspace
+  timeout: 600
+  docker_image: saferhermes-sandbox:bookworm-slim
+
+command_allowlist:
+  - git status
+  - git diff
+  - git add
+  - git commit
+  - rg
+  - ls
+  - pwd
+  - python -m pytest
+  - uv run python -m pytest

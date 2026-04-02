@@ -1,0 +1,9 @@
+secrets/
+openclaw-upstream/
+.claude/
+.tools/
+.config-backups/
+.vagrant
+*.log
+.serena/
+.DS_Store

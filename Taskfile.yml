@@ -1,0 +1,189 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+
+version: "3"
+
+set: [errexit, pipefail]
+
+dotenv:
+  - vagrant/saferhermes.service.env
+
+tasks:
+  create:
+    desc: Provision and start the SaferHermes virtual appliance
+    cmds:
+      - task: _provision
+      - task: up
+      - cmd: |
+          echo "Next steps:"
+          echo "  1. task setup-gateway"
+          echo "  2. task setup-models"
+          echo "  3. task repo:clone REPO_URL=<url> DEST_NAME=<repo>"
+          echo "  4. task session:new REPO=/srv/repos/<repo>"
+    silent: true
+
+  up:
+    desc: Start the SaferHermes virtual appliance
+    cmds:
+      - task: _up
+      - task: status
+    silent: true
+
+  down:
+    desc: Suspend the SaferHermes virtual appliance
+    cmds:
+      - vagrant suspend
+    silent: true
+
+  restart:
+    desc: Restart the SaferHermes virtual appliance
+    cmds:
+      - vagrant reload
+      - cmd: sleep 2
+        platforms: [linux, darwin]
+      - cmd: powershell -NoProfile -Command "Start-Sleep -Seconds 2"
+        platforms: [windows]
+      - task: status
+    silent: true
+
+  destroy:
+    desc: Destroy the SaferHermes virtual appliance
+    prompt: This will destroy the VM and all SaferHermes state. Are you sure?
+    cmds:
+      - vagrant destroy --force
+    silent: true
+
+  _provision:
+    desc: Provision the SaferHermes virtual appliance
+    prompt:
+      - |
+        WARNING: This VM ships logs to Azure and installs endpoint protection tooling.
+        Continue only if this is the intended managed environment.
+    internal: true
+    cmds:
+      - vagrant up --provision
+    status:
+      - |
+        {{if eq OS "windows"}}
+          powershell -NoProfile -Command "
+            $state=(
+              vagrant status saferhermes --machine-readable | Select-String 'saferhermes,state,' | Select-Object -Last 1
+            ).ToString().Split(',')[-1].Trim();
+            if ($state -eq 'running') { exit 0 } else { exit 1 }
+          "
+        {{else}}
+          test "$(vagrant status saferhermes --machine-readable | grep 'saferhermes,state,' | awk -F, '{print $NF}')" = "running"
+        {{end}}
+      - |
+        {{if eq OS "windows"}}
+          powershell -NoProfile -Command "
+            $svc=(vagrant ssh -c 'sudo systemctl is-active saferhermes').Trim();
+            if ($svc -eq 'active') { exit 0 } else { exit 1 }"
+        {{else}}
+          test "$(vagrant ssh -c 'sudo systemctl is-active saferhermes')" = "active"
+        {{end}}
+
+  _up:
+    desc: Start the SaferHermes virtual appliance
+    internal: true
+    cmds:
+      - vagrant up
+      - cmd: sleep 2
+        platforms: [linux, darwin]
+      - cmd: powershell -NoProfile -Command "Start-Sleep -Seconds 2"
+        platforms: [windows]
+    status:
+      - |
+        {{if eq OS "windows"}}
+          powershell -NoProfile -Command "
+            $svc=(vagrant ssh -c 'sudo systemctl is-active saferhermes').Trim();
+            if ($svc -eq 'active') { exit 0 } else { exit 1 }"
+        {{else}}
+          test "$(vagrant ssh -c 'sudo systemctl is-active saferhermes')" = "active"
+        {{end}}
+
+  status:
+    desc: Show service status for the SaferHermes gateway
+    deps: [_up]
+    cmds:
+      - vagrant ssh -c "sudo systemctl status saferhermes --no-pager"
+    silent: true
+
+  setup-gateway:
+    desc: Run interactive Hermes gateway setup as the saferhermes service user
+    prompt: This opens the Hermes setup flow inside the VM. Continue?
+    deps: [_up]
+    cmds:
+      - cmd: |
+          vagrant ssh -c 'sudo -u saferhermes -H env HOME=/var/lib/saferhermes \
+          /opt/saferhermes/venv/bin/hermes setup'
+      - cmd: vagrant ssh -c 'sudo systemctl restart saferhermes'
+    silent: true
+
+  setup-models:
+    desc: Configure model credentials for Hermes
+    prompt: This opens the Hermes model selector inside the VM. Continue?
+    deps: [_up]
+    cmds:
+      - cmd: |
+          vagrant ssh -c 'sudo -u saferhermes -H env HOME=/var/lib/saferhermes \
+          /opt/saferhermes/venv/bin/hermes model'
+      - cmd: vagrant ssh -c 'sudo systemctl restart saferhermes'
+    silent: true
+
+  logs:tail:
+    desc: Tail SaferHermes service logs
+    prompt: This will stream the live journal for saferhermes. Continue?
+    deps: [_up]
+    cmds:
+      - vagrant ssh -c "sudo journalctl -fu saferhermes"
+    silent: true
+
+  logs:dump:
+    desc: Dump SaferHermes service logs to a local file
+    requires:
+      vars: [LOG_FILE]
+    deps: [_up]
+    cmds:
+      - vagrant ssh -c "sudo journalctl --no-tail --no-pager -u saferhermes" > {{.LOG_FILE}}
+      - echo "Logs written to {{.LOG_FILE}}"
+    silent: true
+
+  shell:
+    desc: Open an interactive shell inside the VM
+    deps: [_up]
+    cmds:
+      - vagrant ssh
+    silent: true
+
+  repo:clone:
+    desc: Clone a repo into /srv/repos inside the appliance
+    requires:
+      vars: [REPO_URL, DEST_NAME]
+    deps: [_up]
+    cmds:
+      - cmd: |
+          vagrant ssh -c 'sudo -u saferhermes -H env HOME=/var/lib/saferhermes \
+          git clone {{.REPO_URL}} /srv/repos/{{.DEST_NAME}}'
+    silent: true
+
+  session:new:
+    desc: Start a new Hermes CLI session in a repo with worktree isolation
+    requires:
+      vars: [REPO]
+    deps: [_up]
+    cmds:
+      - cmd: |
+          vagrant ssh -c 'cd {{.REPO}} && sudo -u saferhermes -H env HOME=/var/lib/saferhermes \
+          MESSAGING_CWD={{.REPO}} /opt/saferhermes/venv/bin/hermes -w'
+    silent: true
+
+  session:continue:
+    desc: Resume the most recent Hermes CLI session for a repo
+    requires:
+      vars: [REPO]
+    deps: [_up]
+    cmds:
+      - cmd: |
+          vagrant ssh -c 'cd {{.REPO}} && sudo -u saferhermes -H env HOME=/var/lib/saferhermes \
+          MESSAGING_CWD={{.REPO}} /opt/saferhermes/venv/bin/hermes --continue -w'
+    silent: true

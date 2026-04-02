@@ -1,0 +1,51 @@
+[Unit]
+Description=SaferHermes Gateway
+StartLimitBurst=3
+StartLimitIntervalSec=5min
+After=network-online.target docker.service
+Wants=network-online.target docker.service
+
+[Service]
+Type=simple
+User=saferhermes
+Group=saferhermes
+SupplementaryGroups=docker
+WorkingDirectory=/var/lib/saferhermes
+ExecStart=/etc/saferhermes/startup.sh
+EnvironmentFile=/etc/saferhermes/service.env
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
+UMask=0077
+
+RuntimeDirectory=saferhermes
+RuntimeDirectoryMode=0700
+StateDirectory=saferhermes
+StateDirectoryMode=0700
+CacheDirectory=saferhermes
+CacheDirectoryMode=0700
+LogsDirectory=saferhermes
+LogsDirectoryMode=0700
+ConfigurationDirectory=saferhermes
+ConfigurationDirectoryMode=0750
+
+LockPersonality=yes
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProcSubset=pid
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectHostname=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectProc=noaccess
+ProtectSystem=strict
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+ReadWritePaths=/var/lib/saferhermes /srv/repos
+
+[Install]
+WantedBy=multi-user.target
