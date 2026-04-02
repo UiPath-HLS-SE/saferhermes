@@ -19,21 +19,29 @@ test -x "$(type -p ca-certificates)" || apt install -y ca-certificates
 test -x "$(type -p python3)" || apt install -y python3
 apt install -y python3-pip python3-venv jq
 
-## Install Microsoft Defender
-echo "=== Installing Microsoft Defender ==="
-curl -sL https://aka.ms/InstallAzureCLIDeb | bash
-wget https://raw.githubusercontent.com/microsoft/mdatp-xplat/master/linux/installation/mde_installer.sh \
-    -O ~/mde_installer.sh
-wget 'https://dfescripts.blob.core.windows.net/dfelinuxscript/MicrosoftDefenderATPOnboardingLinuxServer.py?sp=r&st=2023-03-16T10:58:06Z&se=2026-04-01T17:58:06Z&spr=https&sv=2021-12-02&sr=b&sig=NIflnJXmjU%2Fl2h7UNBJddDuFaf67TzG0Wxl7H%2BnLjN8%3D' \
-    -O ~/MicrosoftDefenderATPOnboardingLinuxServer.py
-chmod +x ~/mde_installer.sh
-~/mde_installer.sh \
-    --install \
-    --channel prod \
-    --tag GROUP SAFERHERMES \
-    --pre-req \
-    -y \
-    -p
+## Install Microsoft Defender when an onboarding URL is explicitly provided.
+echo "=== Microsoft Defender onboarding ==="
+if [[ -n "${MDE_ONBOARDING_URL:-}" ]]; then
+    echo "MDE_ONBOARDING_URL is set; attempting Defender install."
+    curl -sL https://aka.ms/InstallAzureCLIDeb | bash
+    if wget https://raw.githubusercontent.com/microsoft/mdatp-xplat/master/linux/installation/mde_installer.sh \
+        -O ~/mde_installer.sh \
+        && wget "$MDE_ONBOARDING_URL" -O ~/MicrosoftDefenderATPOnboardingLinuxServer.py; then
+        chmod +x ~/mde_installer.sh
+        ~/mde_installer.sh \
+            --install \
+            --channel prod \
+            --tag GROUP SAFERHERMES \
+            --pre-req \
+            -y \
+            -p
+        echo "Microsoft Defender install completed."
+    else
+        echo "WARNING: Defender onboarding download failed; continuing without Defender."
+    fi
+else
+    echo "MDE_ONBOARDING_URL is not set; skipping optional Defender onboarding."
+fi
 echo -e "=== END ===\n"
 
 ## Install Azure CLI

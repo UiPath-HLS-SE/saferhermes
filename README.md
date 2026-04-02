@@ -39,6 +39,11 @@ service.
 task create
 ```
 
+Defender onboarding is optional. If you need Microsoft Defender for Endpoint
+inside the guest, provide a fresh onboarding asset URL as `MDE_ONBOARDING_URL`
+before provisioning. If you do not set it, provisioning continues without
+Defender.
+
 ### 2. Configure Hermes
 
 Run the interactive Hermes setup once to add model providers and any messaging
@@ -98,3 +103,10 @@ Recommended pattern:
 - allow direct host writes outside `/srv/repos` and the Hermes state dir
 - give the default allowlist `git push` or cloud-deployment commands
 - reuse the same branch for unrelated long-running experiments
+
+## Troubleshooting
+
+If provisioning fails during Defender onboarding with a `403` from an Azure
+Blob SAS URL, the onboarding asset has expired. Either set a fresh
+`MDE_ONBOARDING_URL` and reprovision, or rerun without that variable so the
+optional Defender step is skipped.
