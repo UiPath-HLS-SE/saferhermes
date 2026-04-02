@@ -35,8 +35,7 @@ else
 fi
 
 echo
-echo "=== enabling logging and openclaw daemons ==="
+echo "=== enabling logging and saferhermes daemons ==="
 systemctl daemon-reload
 systemctl enable --now fluent-bit
-systemctl enable --now openclaw
-systemctl restart nginx
+systemctl enable --now saferhermes

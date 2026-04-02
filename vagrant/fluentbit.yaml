@@ -1,4 +1,4 @@
-# Fluent-bit collector for openclaw. Ingests openclaw logs and pushes them to a log ingestion endpoint.
+# Fluent-bit collector for saferhermes. Ingests gateway logs and pushes them to a log ingestion endpoint.
 # Will be appended to the main fluent-bit configuration.
 service:
   flush: 1
@@ -8,11 +8,11 @@ service:
 pipeline:
   inputs:
     - name: systemd
-      tag: openclaw-gateway.log
-      systemd_filter: _SYSTEMD_UNIT=openclaw.service
+      tag: saferhermes-gateway.log
+      systemd_filter: _SYSTEMD_UNIT=saferhermes.service
   outputs:
     - name: azure_blob
-      match: openclaw-gateway.log
+      match: saferhermes-gateway.log
       auth_type: sas
       account_name: ${AZURE_BLOB_ACCOUNT_NAME}
       sas_token: ${AZURE_STORAGE_SAS_TOKEN}

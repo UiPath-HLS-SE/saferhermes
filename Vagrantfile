@@ -4,8 +4,6 @@
 AZURE_SUBSCRIPTION_ID = "f65321ce-fb9c-42a0-afe6-68ee26440d72"
 AZURE_BLOB_ACCOUNT_NAME = "clawdbotevents"
 
-# Patches vagrant-vbguest plugin to properly execute in newer Ruby environments
-# where File.exists is no longer supported
 unless File.respond_to?(:exists?)
   class << File
     def exists?(path)
@@ -14,172 +12,141 @@ unless File.respond_to?(:exists?)
   end
 end
 
-# [Constants]
-GATEWAY_HOST_PORT=1337
-OPENCLAW_ENV_PATH="/etc/openclaw/service.env"
-# [END]
+SAFERHERMES_ENV_PATH = "/etc/saferhermes/service.env"
 
 Vagrant.configure("2") do |config|
-  config.vm.define "openclaw" do |openclaw|
-    openclaw.vm.box = "bento/debian-13"
-    openclaw.vm.box_version = "202510.26.0"
+  config.vm.define "saferhermes" do |vm|
+    vm.vm.box = "bento/debian-13"
+    vm.vm.box_version = "202510.26.0"
 
-    openclaw.vm.provider "virtualbox" do |vb|
+    vm.vm.provider "virtualbox" do |vb|
       vb.gui = false
       vb.memory = "4096"
       vb.check_guest_additions = false
       if Vagrant.has_plugin?("vagrant-vbguest")
-          config.vbguest.auto_update = false
+        config.vbguest.auto_update = false
       end
     end
 
-    openclaw.ssh.shell = "bash"
+    vm.ssh.shell = "bash"
+    vm.vm.synced_folder ".", "/vagrant", disabled: true
 
-    openclaw.vm.provision "shell" do |s|
+    vm.vm.provision "shell" do |s|
       s.privileged = true
-      s.name="set-dns-nameservers"
+      s.name = "set-dns-nameservers"
       s.inline = <<-SCRIPT
         echo "nameserver 1.1.1.1" > /etc/resolv.conf.head
         echo "nameserver 8.8.8.8" >> /etc/resolv.conf.head
       SCRIPT
     end
-    openclaw.vm.network "forwarded_port", guest: 80, host: GATEWAY_HOST_PORT, host_ip: "127.0.0.1"
 
-    openclaw.vm.synced_folder ".", "/vagrant", disabled: true
-
-    ## Add openclaw user and group
-    openclaw.vm.provision "shell" do |s|
+    vm.vm.provision "shell" do |s|
       s.privileged = true
+      s.name = "create-service-user"
       s.inline = <<-SCRIPT
-        # add separate group/user for openclaw
-        grep -q openclaw /etc/group || groupadd -g 10001 openclaw &&
-        grep -q openclaw /etc/passwd ||useradd -u 10001 -g openclaw -d /home/openclaw -s /usr/sbin/nologin -m openclaw
+        grep -q saferhermes /etc/group || groupadd -g 10001 saferhermes
+        grep -q saferhermes /etc/passwd || useradd -u 10001 -g saferhermes -d /var/lib/saferhermes -s /usr/sbin/nologin -m saferhermes
+        mkdir -p /srv/repos
+        chown saferhermes:saferhermes /srv/repos
+        chmod 750 /srv/repos
       SCRIPT
     end
-    ## END
 
-    ## Install dependencies
-    openclaw.vm.provision "shell" do |s|
+    vm.vm.provision "shell" do |s|
       s.privileged = true
-      s.name="install-dependencies"
-      s.env =  {
+      s.name = "install-dependencies"
+      s.env = {
         "ENV" => "$HOME/.bashrc",
         "DEBIAN_FRONTEND" => "noninteractive",
         "AZURE_SUBSCRIPTION_ID" => AZURE_SUBSCRIPTION_ID,
       }
-      s.path= "./vagrant/install-deps.sh"
+      s.path = "./vagrant/install-deps.sh"
     end
-    ## END
 
-    ## Build docker images for sandboxing
-    openclaw.vm.provision "docker"
-    openclaw.vm.provision "file" do |file|
+    vm.vm.provision "docker"
+    vm.vm.provision "file" do |file|
       file.source = "vagrant/docker"
-      file.destination = "/tmp/openclaw-docker-sandbox"
+      file.destination = "/tmp/saferhermes-docker-sandbox"
     end
-    openclaw.vm.provision "shell" do |s|
+    vm.vm.provision "shell" do |s|
       s.privileged = true
-      s.name="build-docker-sandbox"
+      s.name = "build-docker-sandbox"
       s.inline = <<-SCRIPT
-        cd /tmp/openclaw-docker-sandbox
+        cd /tmp/saferhermes-docker-sandbox
         bash scripts/sandbox-setup.sh
         bash scripts/sandbox-browser-setup.sh
-        rm -rf /tmp/openclaw-docker-sandbox
+        rm -rf /tmp/saferhermes-docker-sandbox
       SCRIPT
     end
-    ## END
 
-
-    ## Copy service files to the VM
-    openclaw.vm.provision "file" do |file|
-      file.source = "vagrant/openclaw.config.json"
-      file.destination = "/tmp/openclaw/config.json"
+    vm.vm.provision "file" do |file|
+      file.source = "vagrant/hermes.config.yaml"
+      file.destination = "/tmp/saferhermes/config.yaml"
     end
-    openclaw.vm.provision "file" do |file|
-      file.source = "vagrant/openclaw-startup.sh"
-      file.destination = "/tmp/openclaw/startup.sh"
+    vm.vm.provision "file" do |file|
+      file.source = "vagrant/saferhermes-startup.sh"
+      file.destination = "/tmp/saferhermes/startup.sh"
     end
-    openclaw.vm.provision "file" do |file|
-      file.source = "vagrant/openclaw.service"
-      file.destination = "/tmp/openclaw/openclaw.service"
+    vm.vm.provision "file" do |file|
+      file.source = "vagrant/saferhermes.service"
+      file.destination = "/tmp/saferhermes/saferhermes.service"
     end
-    openclaw.vm.provision "file" do |file|
-      file.source = "vagrant/openclaw.service.env"
-      file.destination = "/tmp/openclaw/openclaw.service.env"
+    vm.vm.provision "file" do |file|
+      file.source = "vagrant/saferhermes.service.env"
+      file.destination = "/tmp/saferhermes/saferhermes.service.env"
     end
-    openclaw.vm.provision "file" do |file|
+    vm.vm.provision "file" do |file|
       file.source = "vagrant/fluentbit.yaml"
       file.destination = "/tmp/fluentbit/conf.yaml"
     end
-    openclaw.vm.provision "file" do |file|
+    vm.vm.provision "file" do |file|
       file.source = "vagrant/setup-azure-monitor.sh"
       file.destination = "~/utils/setup-azure-monitor.sh"
     end
-    openclaw.vm.provision "file" do |file|
-      file.source = "vagrant/nginx/nginx.conf"
-      file.destination = "/tmp/nginx-conf/nginx.conf"
-    end
-    openclaw.vm.provision "file" do |file|
-      file.source = "vagrant/nginx/token-expired.html"
-      file.destination = "/tmp/nginx-conf/token-expired.html"
-    end
-    openclaw.vm.provision "shell" do |s|
+    vm.vm.provision "shell" do |s|
       s.privileged = false
-      s.name="copy-config"
+      s.name = "copy-config"
       s.inline = <<-SCRIPT
-        # [Openclaw Configs]
-        sudo mkdir -p /etc/openclaw
+        sudo mkdir -p /etc/saferhermes /etc/fluent-bit /var/lib/saferhermes/.hermes
+        sudo mv /tmp/saferhermes/saferhermes.service /etc/systemd/system/saferhermes.service
+        sudo mv /tmp/saferhermes/startup.sh /etc/saferhermes/startup.sh
+        sudo mv /tmp/saferhermes/saferhermes.service.env #{SAFERHERMES_ENV_PATH}
+        sudo mv /tmp/saferhermes/config.yaml /var/lib/saferhermes/.hermes/config.yaml
+        sudo rm -rf /tmp/saferhermes
 
-        sudo mv /tmp/openclaw/openclaw.service /etc/systemd/system/openclaw.service
-        sudo mv /tmp/openclaw/config.json /etc/openclaw/config.json
-        sudo mv /tmp/openclaw/startup.sh /etc/openclaw/startup.sh
-        sudo mv /tmp/openclaw/openclaw.service.env #{OPENCLAW_ENV_PATH}
-        sudo rm -rf /tmp/openclaw
+        sudo chmod 750 /etc/saferhermes
+        sudo chown -R root:saferhermes /etc/saferhermes
+        sudo chmod 550 /etc/saferhermes/startup.sh
+        sudo chown -R saferhermes:saferhermes /var/lib/saferhermes
+        sudo chmod 700 /var/lib/saferhermes/.hermes
+        sudo touch /var/lib/saferhermes/.hermes/.env
+        sudo chown saferhermes:saferhermes /var/lib/saferhermes/.hermes/.env
+        sudo chmod 600 /var/lib/saferhermes/.hermes/.env
 
-        sudo chmod 700 /etc/openclaw
-        sudo chown -R openclaw:openclaw /etc/openclaw
-        sudo chmod 500 /etc/openclaw/startup.sh
-
-        # [FluentBit Configs]
-        sudo mkdir -p /etc/fluent-bit
         sudo mv /tmp/fluentbit/conf.yaml /etc/fluent-bit/conf.yaml
-
-        # [Nginx Configs]
-        sudo mv /tmp/nginx-conf/nginx.conf /etc/nginx/nginx.conf
-        sudo mv /tmp/nginx-conf/token-expired.html /usr/share/nginx/html/token-expired.html
-        sudo rm -f /etc/nginx/sites-enabled/default
-        sudo rm -rf /tmp/nginx-conf
-
-        # [Utils]
         chmod +x ~/utils/setup-azure-monitor.sh
       SCRIPT
     end
-    ## END
 
-    openclaw.trigger.after :up do |trigger|
-      trigger.name="config-migrations"
-      trigger.info="Applying migrations to openclaw config"
+    vm.trigger.after :up do |trigger|
+      trigger.name = "bootstrap-hermes-home"
+      trigger.info = "Preparing Hermes state directories"
       trigger.run_remote = {
-        env: {
-          "GATEWAY_PORT" => GATEWAY_HOST_PORT,
-          "OPENCLAW_ENV_PATH" => OPENCLAW_ENV_PATH,
-        },
         path: "./vagrant/migrations.sh"
       }
     end
 
-    openclaw.trigger.after :up, :reload do |trigger|
-      trigger.name="start-service"
-      trigger.info="Running post-boot setup"
+    vm.trigger.after :up, :reload do |trigger|
+      trigger.name = "start-service"
+      trigger.info = "Running post-boot setup"
       trigger.run_remote = {
         privileged: true,
         env: {
-            "AZURE_SUBSCRIPTION_ID" => AZURE_SUBSCRIPTION_ID,
-            "AZURE_BLOB_ACCOUNT_NAME" => AZURE_BLOB_ACCOUNT_NAME,
+          "AZURE_SUBSCRIPTION_ID" => AZURE_SUBSCRIPTION_ID,
+          "AZURE_BLOB_ACCOUNT_NAME" => AZURE_BLOB_ACCOUNT_NAME,
         },
         path: "./vagrant/post-boot-setup.sh"
       }
     end
-
   end
 end

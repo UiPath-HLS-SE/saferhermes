@@ -16,6 +16,8 @@ test -x "$(type -p gpg)"  || apt install -y gpg
 test -x "$(type -p git)" || apt install -y git
 test -x "$(type -p unzip)" || apt install -y unzip
 test -x "$(type -p ca-certificates)" || apt install -y ca-certificates
+test -x "$(type -p python3)" || apt install -y python3
+apt install -y python3-pip python3-venv jq
 
 ## Install Microsoft Defender
 echo "=== Installing Microsoft Defender ==="
@@ -28,7 +30,7 @@ chmod +x ~/mde_installer.sh
 ~/mde_installer.sh \
     --install \
     --channel prod \
-    --tag GROUP OPENCLAW \
+    --tag GROUP SAFERHERMES \
     --pre-req \
     -y \
     -p
@@ -56,23 +58,11 @@ echo "deb [signed-by=/usr/share/keyrings/fluentbit-keyring.gpg] https://packages
 apt update
 apt install -y fluent-bit
 echo -e "=== END ===\n"
-## jq, used at runtime to extract information from the current state of openclaw
-echo "=== Installing jq ==="
-apt install -y jq
-echo -e "=== END ===\n"
 
-## install fast node manager
-echo "=== Installing Node ==="
-curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
-apt install -y nodejs
-corepack enable pnpm
-# Verify pnpm version:
-pnpm -v
-pnpm config set minimumReleaseAge 4320 && \
-pnpm config set global-bin-dir /usr/local/bin && \
-pnpm config set global-dir /usr/local/lib/node_modules && \
-echo -e "=== END ===\n"
-
-echo "=== Installing openclaw ==="
-pnpm add -g openclaw --prod --ignore-scripts
+echo "=== Installing SaferHermes runtime ==="
+mkdir -p /opt/saferhermes
+python3 -m venv /opt/saferhermes/venv
+/opt/saferhermes/venv/bin/pip install --upgrade pip wheel
+/opt/saferhermes/venv/bin/pip install "hermes-agent[all]"
+ln -sf /opt/saferhermes/venv/bin/hermes /usr/local/bin/hermes
 echo -e "=== END ===\n"

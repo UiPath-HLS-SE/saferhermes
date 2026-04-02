@@ -2,10 +2,9 @@
 
 set -euo pipefail
 
-install -d -m 0700 -o saferhermes -g saferhermes /var/lib/saferhermes/.hermes
+: "${HOME:?HOME must be set}"
+: "${PATH:?PATH must be set}"
 
-sudo -u saferhermes -H env HOME=/var/lib/saferhermes bash <<'SCRIPT'
-set -euo pipefail
 mkdir -p \
   "$HOME/.hermes/cron" \
   "$HOME/.hermes/sessions" \
@@ -19,4 +18,5 @@ mkdir -p \
 touch "$HOME/.hermes/.env"
 chmod 700 "$HOME/.hermes"
 chmod 600 "$HOME/.hermes/.env"
-SCRIPT
+
+exec /opt/saferhermes/venv/bin/hermes gateway
