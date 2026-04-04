@@ -4,6 +4,7 @@
 AZURE_SUBSCRIPTION_ID = "f65321ce-fb9c-42a0-afe6-68ee26440d72"
 AZURE_BLOB_ACCOUNT_NAME = "clawdbotevents"
 DEFENDER_SETUP_SCRIPT_URL = "https://dfescripts.blob.core.windows.net/dfelinuxscript/MicrosoftDefenderATPOnboardingLinuxServer.py?sp=r&st=2026-04-03T11:09:34Z&se=2028-06-09T19:24:34Z&spr=https&sv=2024-11-04&sr=c&sig=5Tr4H096BLQct1e%2B91ah4G47kEoGByNPqTzYSPuohCA%3D"
+ENABLE_AZURE_LOGGING = ENV.fetch("ENABLE_AZURE_LOGGING", "false")
 
 unless File.respond_to?(:exists?)
   class << File
@@ -144,6 +145,7 @@ Vagrant.configure("2") do |config|
       trigger.run_remote = {
         privileged: true,
         env: {
+          "ENABLE_AZURE_LOGGING" => ENABLE_AZURE_LOGGING,
           "AZURE_SUBSCRIPTION_ID" => AZURE_SUBSCRIPTION_ID,
           "AZURE_BLOB_ACCOUNT_NAME" => AZURE_BLOB_ACCOUNT_NAME,
         },

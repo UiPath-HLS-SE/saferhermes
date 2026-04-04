@@ -44,6 +44,10 @@ inside the guest, provide a fresh onboarding asset URL as `MDE_ONBOARDING_URL`
 before provisioning. If you do not set it, provisioning continues without
 Defender.
 
+Azure-backed log shipping is also optional and is disabled by default. If you
+want to enable it, set `ENABLE_AZURE_LOGGING=true` before provisioning, then
+complete the Azure device login when prompted during post-boot setup.
+
 ### 2. Configure Hermes
 
 Run the interactive Hermes setup once to add model providers and any messaging
@@ -96,6 +100,7 @@ Recommended pattern:
 - keep the VM separate from your workstation repo clones
 - review and tighten `command_allowlist` in [`vagrant/hermes.config.yaml`](./vagrant/hermes.config.yaml)
 - monitor `journalctl -u saferhermes` and Azure-shipped logs
+- use `ENABLE_AZURE_LOGGING=true` only when you actually want Azure-backed log shipping
 
 **Never:**
 
@@ -110,3 +115,7 @@ If provisioning fails during Defender onboarding with a `403` from an Azure
 Blob SAS URL, the onboarding asset has expired. Either set a fresh
 `MDE_ONBOARDING_URL` and reprovision, or rerun without that variable so the
 optional Defender step is skipped.
+
+If provisioning fails during Azure device login and you do not need off-box
+log shipping yet, rerun with Azure logging disabled (the default) and rely on
+local logs from `journalctl -u saferhermes`.
