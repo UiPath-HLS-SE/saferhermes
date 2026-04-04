@@ -77,6 +77,6 @@ echo "=== Installing SaferHermes runtime ==="
 mkdir -p /opt/saferhermes
 python3 -m venv /opt/saferhermes/venv
 /opt/saferhermes/venv/bin/pip install --upgrade pip wheel
-/opt/saferhermes/venv/bin/pip install "hermes-agent[all]"
+/opt/saferhermes/venv/bin/pip install "hermes-agent[all] @ git+https://github.com/NousResearch/hermes-agent.git@main"
 ln -sf /opt/saferhermes/venv/bin/hermes /usr/local/bin/hermes
 echo -e "=== END ===\n"
