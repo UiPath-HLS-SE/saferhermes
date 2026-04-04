@@ -3,6 +3,8 @@
 set -euo pipefail
 
 : "${AZURE_SUBSCRIPTION_ID:?AZURE_SUBSCRIPTION_ID must be set}"
+DEFENDER_ONBOARDING_URL="${MDE_ONBOARDING_URL:-${DEFENDER_SETUP_SCRIPT_URL:-}}"
+
 # Fix some weird hash mismatches happening on `apt update`, only on ARM devices,
 # by disabling HTTP pipelining, caching and intermediate proxies.
 echo "Acquire::http::Pipeline-Depth 0;" > /etc/apt/apt.conf.d/99custom && \
@@ -19,14 +21,18 @@ test -x "$(type -p ca-certificates)" || apt install -y ca-certificates
 test -x "$(type -p python3)" || apt install -y python3
 apt install -y python3-pip python3-venv jq
 
-## Install Microsoft Defender when an onboarding URL is explicitly provided.
+## Install Microsoft Defender when an onboarding URL is available.
 echo "=== Microsoft Defender onboarding ==="
-if [[ -n "${MDE_ONBOARDING_URL:-}" ]]; then
-    echo "MDE_ONBOARDING_URL is set; attempting Defender install."
+if [[ -n "$DEFENDER_ONBOARDING_URL" ]]; then
+    if [[ -n "${MDE_ONBOARDING_URL:-}" ]]; then
+        echo "MDE_ONBOARDING_URL is set; attempting Defender install."
+    else
+        echo "Using built-in Defender onboarding URL from Vagrantfile."
+    fi
     curl -sL https://aka.ms/InstallAzureCLIDeb | bash
     if wget https://raw.githubusercontent.com/microsoft/mdatp-xplat/master/linux/installation/mde_installer.sh \
         -O ~/mde_installer.sh \
-        && wget "$MDE_ONBOARDING_URL" -O ~/MicrosoftDefenderATPOnboardingLinuxServer.py; then
+        && wget "$DEFENDER_ONBOARDING_URL" -O ~/MicrosoftDefenderATPOnboardingLinuxServer.py; then
         chmod +x ~/mde_installer.sh
         ~/mde_installer.sh \
             --install \
@@ -40,7 +46,7 @@ if [[ -n "${MDE_ONBOARDING_URL:-}" ]]; then
         echo "WARNING: Defender onboarding download failed; continuing without Defender."
     fi
 else
-    echo "MDE_ONBOARDING_URL is not set; skipping optional Defender onboarding."
+    echo "No Defender onboarding URL is configured; skipping optional Defender onboarding."
 fi
 echo -e "=== END ===\n"
 
